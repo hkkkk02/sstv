@@ -164,8 +164,13 @@ class SSTVDecoder(object):
             bit_offset = vis_start + bit_idx * bit_size
             section = self._samples[bit_offset:bit_offset+bit_size]
             freq = self._peak_fft_freq(section)
+            frqlog = "Detected VIS bit {} ({} hz)"
+            log_message(frqlog.format(bit_idx, freq))
             # 1100 hz = 1, 1300hz = 0
-            vis_bits.append(int(freq <= 1200))
+            if freq < 3000:
+                vis_bits.append(int(freq <= 1200))
+            else:
+                vis_bits.append(int(freq/3 <= 1200))
 
         # Check for even parity in last bit
         parity = sum(vis_bits) % 2 == 0
