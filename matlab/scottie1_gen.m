@@ -2,7 +2,7 @@ clc;
 clear;
 sampleRate = 44100;%sampling rate
 signal = [];
-image = imread('bupt_scottie.png');
+image = imread('../color_test.png');
 
 R = image(:,:,1);
 G = image(:,:,2);

@@ -234,6 +234,7 @@ class SSTVDecoder(object):
         if self.mode.HAS_START_SYNC:
             # Start at the end of the initial sync pulse
             seq_start = self._align_sync(image_start, start_of_sync=False)
+            log_message("Start at the end")
             if seq_start is None:
                 raise EOFError("Reached end of audio before image data")
 
