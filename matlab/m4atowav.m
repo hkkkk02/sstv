@@ -2,11 +2,11 @@ clear all;
 close all;
 
 % 读取 .m4a 文件
-[inputAudio, fs] = audioread('20241227-1650_SSTV-color-test.m4a'); % input.m4a 是文件名
+[inputAudio, fs] = audioread('../resources/20241227-2307_SSTV-color-test.m4a'); % input.m4a 是文件名
 disp(fs);
 
 % 将音频保存为 .wav 文件
-audiowrite('20241227-1650_SSTV-color-test.wav', inputAudio, fs); % output.wav 是目标文件名
+audiowrite('../resources/20241227-2307_SSTV-color-test.wav', inputAudio, fs); % output.wav 是目标文件名
 
 %%
 % disp('Conversion from m4a to wav completed.');

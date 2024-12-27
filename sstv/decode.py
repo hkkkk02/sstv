@@ -8,12 +8,28 @@ from scipy.signal.windows import hann
 from . import spec
 from .common import log_message, progress_bar
 
+import logging
+
+import matplotlib.pyplot as plt
+
+# Config logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        # logging.StreamHandler(), # 输出到console
+        logging.FileHandler("./build/sstv_decoder.log")  # 输出到文件
+    ]
+)
+
 
 def calc_lum(freq):
     """Converts SSTV pixel frequency range into 0-255 luminance byte"""
 
     lum = int(round((freq - 1500) / 3.1372549))
-    return min(max(lum, 0), 255)
+    lum_clamped = min(max(lum, 0), 255)
+    logging.debug(f"calc_lum: freq={freq}, lum={lum}, clamped_lum={lum_clamped}")
+    return lum_clamped
 
 
 def barycentric_peak_interp(bins, x):
@@ -62,20 +78,27 @@ class SSTVDecoder(object):
         Returns a PIL image on success, and None if no SSTV signal was found
         """
 
+        logging.info(f"decode: Starting SSTV decoding with skip={skip:.2f}s")
+
         if skip > 0.0:
-            self._samples = self._samples[round(skip * self._sample_rate):]
+            skip_samples = round(skip * self._sample_rate)
+            self._samples = self._samples[skip_samples:]
+            logging.debug(f"decode: Skipped {skip_samples} samples")
 
         header_end = self._find_header()
 
         if header_end is None:
+            logging.warning("decode: No SSTV header found, returning None")
             return None
 
+        logging.info("decode: SSTV header found, decoding VIS")
         self.mode = self._decode_vis(header_end)
 
         vis_end = header_end + round(spec.VIS_BIT_SIZE * 9 * self._sample_rate)
 
         image_data = self._decode_image_data(vis_end)
 
+        logging.info("decode: Image data decoded, drawing image")
         return self._draw_image(image_data)
 
     def close(self):
@@ -86,6 +109,7 @@ class SSTVDecoder(object):
 
     def _peak_fft_freq(self, data):
         """Finds the peak frequency from a section of audio data"""
+        logging.debug(f"_peak_fft_freq: Starting FFT on data of size {len(data)}")
 
         windowed_data = data * hann(len(data))
         fft = np.abs(np.fft.rfft(windowed_data))
@@ -96,10 +120,13 @@ class SSTVDecoder(object):
         peak = barycentric_peak_interp(fft, x)
 
         # Return frequency in hz
-        return peak * self._sample_rate / len(windowed_data)
+        freq = peak * self._sample_rate / len(windowed_data)
+        logging.debug(f"_peak_fft_freq: Peak frequency={freq:.2f} Hz")
+        return freq
 
     def _find_header(self):
         """Finds the approx sample of the end of the calibration header"""
+        logging.info("_find_header: Searching for calibration header")
 
         header_size = round(spec.HDR_SIZE * self._sample_rate)
         window_size = round(spec.HDR_WINDOW_SIZE * self._sample_rate)
@@ -160,6 +187,10 @@ class SSTVDecoder(object):
         bit_size = round(spec.VIS_BIT_SIZE * self._sample_rate)
         vis_bits = []
 
+        # 将每一个都画出来
+        fig, axes = plt.subplots(2,4, figsize=(20, 8))
+        plt.suptitle('VIS Bits Analysis')
+
         for bit_idx in range(8):
             bit_offset = vis_start + bit_idx * bit_size
             section = self._samples[bit_offset:bit_offset+bit_size]
@@ -171,6 +202,22 @@ class SSTVDecoder(object):
                 vis_bits.append(int(freq <= 1200))
             else:
                 vis_bits.append(int(freq/3 <= 1200))
+            
+            row = int(bit_idx/4)    # 确定在绘图的第几行
+            col = bit_idx % 4       # 确定在绘图的第几列
+            
+            axes[row, col].plot(section)
+            axes[row, col].set_title(f'Bit {bit_idx}')
+            
+            axes[row, col].annotate(
+                f'Freq = {freq:.1f} Hz',  # 文本内容
+                xy=(len(section)/2, max(section)),  # 箭头指向点
+                xytext=(len(section)/2, max(section)*1.1),  # 文本位置
+                ha='center',  # 水平对齐
+                va='bottom'  # 垂直对齐
+            )
+        plt.tight_layout()
+        plt.show()
 
         # Check for even parity in last bit
         parity = sum(vis_bits) % 2 == 0
@@ -188,6 +235,7 @@ class SSTVDecoder(object):
 
         mode = spec.VIS_MAP[vis_value]
         log_message("Detected SSTV mode {}".format(mode.NAME))
+        logging.debug(f"decode: Decoding mode={self.mode}")
 
         return mode
 
@@ -212,12 +260,14 @@ class SSTVDecoder(object):
         end_sync = current_sample + (sync_window // 2)
 
         if start_of_sync:
+            logging.info(f"_align_sync: align_start: {align_start}")
             return end_sync - round(self.mode.SYNC_PULSE * self._sample_rate)
         else:
             return end_sync
 
     def _decode_image_data(self, image_start):
         """Decodes image from the transmission section of an sstv signal"""
+        logging.info(f"_decode_image: Start decode image, image_start: {image_start}")
 
         window_factor = self.mode.WINDOW_FACTOR
         centre_window_time = (self.mode.PIXEL_TIME * window_factor) / 2
@@ -234,7 +284,7 @@ class SSTVDecoder(object):
         if self.mode.HAS_START_SYNC:
             # Start at the end of the initial sync pulse
             seq_start = self._align_sync(image_start, start_of_sync=False)
-            log_message("Start at the end")
+            logging.info(f"_decode_image: seq_start: {seq_start}")
             if seq_start is None:
                 raise EOFError("Reached end of audio before image data")
 
@@ -255,6 +305,7 @@ class SSTVDecoder(object):
                                            self._sample_rate)
 
                     # Align to start of sync pulse
+                    logging.info(f"_decode_image: in line: {line}, chan: {chan}, enter align sync.")
                     seq_start = self._align_sync(seq_start)
                     if seq_start is None:
                         log_message()
