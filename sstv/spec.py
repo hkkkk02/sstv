@@ -73,9 +73,10 @@ class S1(object):
     CHAN_SYNC = 2
     CHAN_TIME = SEP_PULSE + SCAN_TIME
 
-    CHAN_OFFSETS = [SYNC_PULSE + SYNC_PORCH + CHAN_TIME]
-    CHAN_OFFSETS.append(CHAN_OFFSETS[0] + CHAN_TIME)
-    CHAN_OFFSETS.append(SYNC_PULSE + SYNC_PORCH)
+    # Offset based on Sync pulse & porch
+    CHAN_OFFSETS = [SYNC_PULSE + SYNC_PORCH + CHAN_TIME] # Pulse + Porch + Sep + Scan -> Green
+    CHAN_OFFSETS.append(CHAN_OFFSETS[0] + CHAN_TIME) # Green + Sep + Scan -> Blue
+    CHAN_OFFSETS.append(SYNC_PULSE + SYNC_PORCH) # Pulse + Porch -> Red
 
     LINE_TIME = SYNC_PULSE + 3 * CHAN_TIME
     PIXEL_TIME = SCAN_TIME / LINE_WIDTH

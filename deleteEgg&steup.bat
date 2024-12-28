@@ -15,4 +15,4 @@ echo Start setup
 :: 执行Python安装
 python setup.py install
 
-:: pause
+pause

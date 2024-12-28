@@ -28,7 +28,7 @@ def calc_lum(freq):
 
     lum = int(round((freq - 1500) / 3.1372549))
     lum_clamped = min(max(lum, 0), 255)
-    logging.debug(f"calc_lum: freq={freq}, lum={lum}, clamped_lum={lum_clamped}")
+    # logging.debug(f"calc_lum: freq={freq}, lum={lum}, clamped_lum={lum_clamped}")
     return lum_clamped
 
 
@@ -109,7 +109,7 @@ class SSTVDecoder(object):
 
     def _peak_fft_freq(self, data):
         """Finds the peak frequency from a section of audio data"""
-        logging.debug(f"_peak_fft_freq: Starting FFT on data of size {len(data)}")
+        # logging.debug(f"_peak_fft_freq: Starting FFT on data of size {len(data)}")
 
         windowed_data = data * hann(len(data))
         fft = np.abs(np.fft.rfft(windowed_data))
@@ -121,7 +121,7 @@ class SSTVDecoder(object):
 
         # Return frequency in hz
         freq = peak * self._sample_rate / len(windowed_data)
-        logging.debug(f"_peak_fft_freq: Peak frequency={freq:.2f} Hz")
+        # logging.debug(f"_peak_fft_freq: Peak frequency={freq:.2f} Hz")
         return freq
 
     def _find_header(self):
@@ -269,6 +269,9 @@ class SSTVDecoder(object):
         """Decodes image from the transmission section of an sstv signal"""
         logging.info(f"_decode_image: Start decode image, image_start: {image_start}")
 
+        last_seq_start = 0
+        difference_seq_start = 0
+
         window_factor = self.mode.WINDOW_FACTOR
         centre_window_time = (self.mode.PIXEL_TIME * window_factor) / 2
         pixel_window = round(centre_window_time * 2 * self._sample_rate)
@@ -299,14 +302,16 @@ class SSTVDecoder(object):
             for chan in range(channels):
 
                 if chan == self.mode.CHAN_SYNC:
+                    last_seq_start = seq_start
                     if line > 0 or chan > 0:
-                        # Set base offset to the next line
+                        # Set base offset to the next line（before SYnc pulse）
                         seq_start += round(self.mode.LINE_TIME *
                                            self._sample_rate)
-
                     # Align to start of sync pulse
-                    logging.info(f"_decode_image: in line: {line}, chan: {chan}, enter align sync.")
+                    
                     seq_start = self._align_sync(seq_start)
+                    difference_seq_start = seq_start - last_seq_start
+                    logging.info(f"_decode_image: in line: {line}, seq_start: {seq_start}, difference: {difference_seq_start} ended align sync.")
                     if seq_start is None:
                         log_message()
                         log_message("Reached end of audio whilst decoding.")
@@ -324,7 +329,7 @@ class SSTVDecoder(object):
 
                 for px in range(width):
 
-                    chan_offset = self.mode.CHAN_OFFSETS[chan]
+                    chan_offset = self.mode.CHAN_OFFSETS[chan] # 第一行时又加回到Green前
 
                     px_pos = round(seq_start + (chan_offset + px *
                                    pixel_time - centre_window_time) *
